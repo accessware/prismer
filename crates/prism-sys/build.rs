@@ -1,6 +1,9 @@
 //! Builds and links the vendored prism library.
 
-use std::{env, path::PathBuf};
+use std::{
+	env, fs,
+	path::{Path, PathBuf},
+};
 
 use cmake::Config;
 
@@ -14,14 +17,19 @@ const WINDOWS_SYSTEM_LIBS: &[&str] = &["ole32", "onecore", "runtimeobject", "uia
 fn main() {
 	println!("cargo:rerun-if-env-changed=PRISM_LIB_DIR");
 	let static_link = env::var("CARGO_FEATURE_STATIC").is_ok();
-	if let Ok(dir) = env::var("PRISM_LIB_DIR") {
-		println!("cargo:rustc-link-search=native={dir}");
-	} else {
-		build_vendored(static_link);
-	}
+	let vendored = env::var("PRISM_LIB_DIR").map_or_else(
+		|_| Some(build_vendored(static_link)),
+		|dir| {
+			println!("cargo:rustc-link-search=native={dir}");
+			None
+		},
+	);
 	let kind = if static_link { "static" } else { "dylib" };
 	println!("cargo:rustc-link-lib={kind}=prism");
 	if static_link {
+		if let Some(dst) = vendored {
+			link_pkg_config_deps(&dst);
+		}
 		link_cpp_runtime();
 		link_windows_system_libs();
 	}
@@ -38,7 +46,32 @@ fn link_windows_system_libs() {
 	}
 }
 
-fn build_vendored(static_link: bool) {
+/// Links the pkg-config modules prism builds against on Linux, such as giomm, which a static prism also leaves to the final link.
+///
+/// They're read from the `CMake` package prism installs, since which ones it uses depends on what the build machine has.
+fn link_pkg_config_deps(dst: &Path) {
+	let Ok(config) = fs::read_to_string(dst.join("share/prism/prism-config.cmake")) else {
+		return;
+	};
+	for line in config.lines().filter(|line| line.trim_start().starts_with("pkg_check_modules(")) {
+		let Some(spec) = line.split('"').nth(1) else {
+			continue;
+		};
+		let name = spec.split(['>', '<', '=']).next().unwrap_or(spec);
+		let mut probe = pkg_config::Config::new();
+		if let Some(version) = spec[name.len()..].strip_prefix(">=") {
+			let _ = probe.atleast_version(version);
+		}
+		if let Err(e) = probe.probe(name) {
+			panic!("a static prism needs {spec} from pkg-config: {e}");
+		}
+	}
+	if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+		println!("cargo:rustc-link-lib=dylib=dl");
+	}
+}
+
+fn build_vendored(static_link: bool) -> PathBuf {
 	let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"));
 	let source = manifest_dir.join("prism");
 	assert!(
@@ -64,6 +97,7 @@ fn build_vendored(static_link: bool) {
 	let dst = cfg.build();
 	println!("cargo:rustc-link-search=native={}", dst.join("lib").display());
 	println!("cargo:rustc-link-search=native={}", dst.join("bin").display());
+	dst
 }
 
 fn link_cpp_runtime() {
