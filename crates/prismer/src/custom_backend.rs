@@ -4,7 +4,6 @@ use std::ffi::c_void;
 use prism_sys as sys;
 
 use crate::error::{Error, Result};
-
 #[cfg(doc)]
 use crate::{Features, RegistryBuilder};
 
