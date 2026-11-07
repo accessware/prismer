@@ -32,6 +32,7 @@ fn main() {
 		}
 		link_cpp_runtime();
 		link_windows_system_libs();
+		link_apple_frameworks();
 	}
 }
 
@@ -69,6 +70,21 @@ fn link_pkg_config_deps(dst: &Path) {
 	if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
 		println!("cargo:rustc-link-lib=dylib=dl");
 	}
+}
+
+/// Links the frameworks prism links on Apple platforms, in `PrismPlatformApple.cmake`, which a static prism leaves to the final link too.
+fn link_apple_frameworks() {
+	let platform: &[&str] = match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+		Ok("macos") => &["AppKit", "IOKit", "CoreFoundation"],
+		Ok("ios" | "tvos" | "visionos") => &["UIKit"],
+		Ok("watchos") => &["WatchKit"],
+		_ => return,
+	};
+	for framework in ["Foundation", "AVFoundation"].iter().chain(platform) {
+		println!("cargo:rustc-link-lib=framework={framework}");
+	}
+	// prism's Objective-C++ uses ARC, whose runtime functions clang adds only when it does the final link itself.
+	println!("cargo:rustc-link-lib=dylib=objc");
 }
 
 fn build_vendored(static_link: bool) -> PathBuf {
