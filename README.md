@@ -35,7 +35,7 @@ Use `create_best()` unless you have a specific reason not to. The `acquire` fami
 Prism is vendored as a git submodule and built automatically by `prism-sys`'s build script, so all you need is a C++23 toolchain and CMake 3.24+:
 
 ```sh
-git clone --recurse-submodules https://github.com/trypsynth/prismer
+git clone --recurse-submodules https://github.com/accessware/prismer
 cd prismer
 cargo build
 ```

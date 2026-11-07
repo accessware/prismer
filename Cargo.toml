@@ -7,7 +7,7 @@ version = "0.1.4"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/trypsynth/prismer"
+repository = "https://github.com/accessware/prismer"
 keywords = ["tts", "speech", "accessibility", "screen-reader"]
 categories = ["accessibility", "api-bindings"]
 
