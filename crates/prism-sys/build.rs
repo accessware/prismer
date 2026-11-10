@@ -75,7 +75,7 @@ fn link_pkg_config_deps(dst: &Path) {
 /// Links the frameworks prism links on Apple platforms, in `PrismPlatformApple.cmake`, which a static prism leaves to the final link too.
 fn link_apple_frameworks() {
 	let platform: &[&str] = match env::var("CARGO_CFG_TARGET_OS").as_deref() {
-		Ok("macos") => &["AppKit", "IOKit", "CoreFoundation"],
+		Ok("macos") => &["AppKit", "CoreServices", "Security", "IOKit", "CoreFoundation"],
 		Ok("ios" | "tvos" | "visionos") => &["UIKit"],
 		Ok("watchos") => &["WatchKit"],
 		_ => return,

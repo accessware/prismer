@@ -51,7 +51,7 @@ cargo build
 
 By default prism is built and linked as a shared library; note that your application must be able to find it (next to the executable on Windows, or on the loader path elsewhere) at runtime. Enable the `static` feature to build and link it statically instead. The build script links the C++ runtime and the system libraries prism needs for you.
 
-On Apple platforms that only holds when cargo does the final link. If you build a Rust `staticlib` and link it from Xcode, add the system frameworks to your Xcode target yourself: Foundation and AVFoundation everywhere, plus AppKit, IOKit and CoreFoundation on macOS, UIKit on iOS, tvOS and visionOS, or WatchKit on watchOS. prism's Objective-C++ also needs `libobjc`, which Xcode links for any target with Objective-C or Swift code of its own.
+On Apple platforms that only holds when cargo does the final link. If you build a Rust `staticlib` and link it from Xcode, add the system frameworks to your Xcode target yourself: Foundation and AVFoundation everywhere, plus AppKit, CoreServices, Security, IOKit and CoreFoundation on macOS, UIKit on iOS, tvOS and visionOS, or WatchKit on watchOS. prism's Objective-C++ also needs `libobjc`, which Xcode links for any target with Objective-C or Swift code of its own.
 
 ## Custom backends
 

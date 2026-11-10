@@ -67,6 +67,12 @@ impl Features {
 	pub const SPEAK_SSML: Self = Self(sys::PRISM_BACKEND_SUPPORTS_SPEAK_SSML);
 	/// [`Backend::speak_to_memory`] accepts SSML markup.
 	pub const SPEAK_TO_MEMORY_SSML: Self = Self(sys::PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML);
+	/// The backend presents text through a screen reader. At most one of this and [`Self::IS_SPEECH_ENGINE`] is set.
+	pub const IS_SCREEN_READER: Self = Self(sys::PRISM_BACKEND_IS_SCREEN_READER);
+	/// The backend synthesizes speech without a screen reader.
+	pub const IS_SPEECH_ENGINE: Self = Self(sys::PRISM_BACKEND_IS_SPEECH_ENGINE);
+	/// The best-backend choice never picks this backend; it's used only when asked for by ID or name.
+	pub const REQUIRES_EXPLICIT_SELECTION: Self = Self(sys::PRISM_BACKEND_REQUIRES_EXPLICIT_SELECTION);
 
 	/// Returns `true` if every feature in `other` is present in `self`.
 	#[must_use]

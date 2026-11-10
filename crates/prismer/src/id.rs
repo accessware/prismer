@@ -50,4 +50,10 @@ impl BackendId {
 	pub const WINDOW_EYES: Self = Self(sys::PRISM_BACKEND_WINDOW_EYES);
 	/// Spiel (Linux).
 	pub const SPIEL: Self = Self(sys::PRISM_BACKEND_SPIEL);
+	/// Microsoft GDK speech synthesis (Windows, Xbox), built only when the GDK's headers are present.
+	pub const GDK_SPEECH: Self = Self(sys::PRISM_BACKEND_GDK_SPEECH);
+	/// Places text on the system clipboard instead of presenting it. Used only when asked for by ID or name.
+	pub const CLIPBOARD: Self = Self(sys::PRISM_BACKEND_CLIPBOARD);
+	/// Produces no output, for testing. Used only when asked for by ID or name.
+	pub const NO_SPEECH: Self = Self(sys::PRISM_BACKEND_NO_SPEECH);
 }
