@@ -160,6 +160,12 @@ pub const PRISM_BACKEND_PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY: u64 = 1 <<
 pub const PRISM_BACKEND_SUPPORTS_SPEAK_SSML: u64 = 1 << 27;
 /// Reserved.
 pub const PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML: u64 = 1 << 28;
+/// The backend presents text through a screen reader.
+pub const PRISM_BACKEND_IS_SCREEN_READER: u64 = 1 << 56;
+/// The backend synthesizes speech without a screen reader.
+pub const PRISM_BACKEND_IS_SPEECH_ENGINE: u64 = 1 << 57;
+/// The backend is never selected by `prism_registry_create_best` or `prism_registry_acquire_best`, and is obtained only by requesting it by identifier or name.
+pub const PRISM_BACKEND_REQUIRES_EXPLICIT_SELECTION: u64 = 1 << 58;
 /// The highest bit reserved for feature flags.
 pub const PRISM_BACKEND_FEATURE_MAX_BIT: u64 = 1 << 63;
 
@@ -205,6 +211,12 @@ pub const PRISM_BACKEND_SYSTEM_ACCESS: PrismBackendId = 0x8380_F2A3_7B2C_3EB6;
 pub const PRISM_BACKEND_WINDOW_EYES: PrismBackendId = 0x9120_D899_0878_5C13;
 /// Spiel (Linux and BSDs only)
 pub const PRISM_BACKEND_SPIEL: PrismBackendId = 0x478B_44F1_4AD3_D89C;
+/// Microsoft GDK speech synthesis (Windows, Xbox) (only built when the GDK's headers are present)
+pub const PRISM_BACKEND_GDK_SPEECH: PrismBackendId = 0xD39D_8723_4941_6B11;
+/// Places text on the system clipboard instead of presenting it (only used when requested by identifier or name)
+pub const PRISM_BACKEND_CLIPBOARD: PrismBackendId = 0x7056_908D_E8F9_F991;
+/// Produces no output, for testing (only used when requested by identifier or name)
+pub const PRISM_BACKEND_NO_SPEECH: PrismBackendId = 0xC2C0_EAB0_BF97_A5F0;
 
 /// The `PrismConfig` layout version this binding describes.
 pub const PRISM_CONFIG_VERSION: u8 = 4;
