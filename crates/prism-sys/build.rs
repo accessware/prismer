@@ -14,9 +14,29 @@ use cmake::Config;
 /// otherwise it failed with unresolved UI Automation, RPC and Windows Runtime symbols.
 const WINDOWS_SYSTEM_LIBS: &[&str] = &["ole32", "onecore", "runtimeobject", "uiautomationcore", "rpcrt4", "powrprof"];
 
+/// The oldest release of each Apple OS prism builds for, with the variable that sets it.
+///
+/// prism needs `std::jthread`, which Apple's libc++ only has from these releases on.
+const APPLE_DEPLOYMENT_TARGETS: &[(&str, &str, (u32, u32))] = &[
+	("macos", "MACOSX_DEPLOYMENT_TARGET", (11, 0)),
+	("ios", "IPHONEOS_DEPLOYMENT_TARGET", (14, 0)),
+	("tvos", "TVOS_DEPLOYMENT_TARGET", (14, 0)),
+	("watchos", "WATCHOS_DEPLOYMENT_TARGET", (7, 0)),
+	("visionos", "XROS_DEPLOYMENT_TARGET", (1, 0)),
+];
+
+/// The oldest Android API level prism supports, from its Gradle build's `minSdk`.
+const ANDROID_PLATFORM: &str = "android-26";
+
 fn main() {
 	println!("cargo:rerun-if-env-changed=PRISM_LIB_DIR");
-	let static_link = env::var("CARGO_FEATURE_STATIC").is_ok();
+	let static_link = match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+		// An app on these can't load a library cargo built beside it, so prism goes into the app.
+		Ok("ios" | "tvos" | "watchos" | "visionos") => true,
+		// prism's Android backends are Java as much as C++, so Java has to load prism itself, to run its JNI_OnLoad.
+		Ok("android") => false,
+		_ => env::var("CARGO_FEATURE_STATIC").is_ok(),
+	};
 	let vendored = env::var("PRISM_LIB_DIR").map_or_else(
 		|_| Some(build_vendored(static_link)),
 		|dir| {
@@ -110,6 +130,8 @@ fn build_vendored(static_link: bool) -> PathBuf {
 			env::var("CARGO_CFG_TARGET_FEATURE").is_ok_and(|features| features.split(',').any(|f| f == "crt-static"));
 		let _ = cfg.define("CMAKE_MSVC_RUNTIME_LIBRARY", if crt_static { "MultiThreaded" } else { "MultiThreadedDLL" });
 	}
+	set_apple_deployment_target(&mut cfg);
+	use_android_ndk(&mut cfg);
 	let dst = cfg.build();
 	println!("cargo:rustc-link-search=native={}", dst.join("lib").display());
 	println!("cargo:rustc-link-search=native={}", dst.join("bin").display());
@@ -123,7 +145,86 @@ fn link_cpp_runtime() {
 		// MSVC objects carry /DEFAULTLIB directives for their C++ runtime.
 		(_, "msvc") => {}
 		("macos" | "ios" | "tvos" | "watchos" | "visionos", _) => println!("cargo:rustc-link-lib=c++"),
-		("android", _) => println!("cargo:rustc-link-lib=c++_shared"),
 		_ => println!("cargo:rustc-link-lib=stdc++"),
+	}
+}
+
+/// Builds prism for the Apple OS release rustc links for, or prism's oldest when that's older.
+///
+/// Without this, cc, which cmake-rs takes its compiler flags from, builds for the SDK's own
+/// release, so the result only ran on the OS it was built with, and iOS devices failed to link
+/// with `___chkstk_darwin` missing.
+fn set_apple_deployment_target(cfg: &mut Config) {
+	let os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+	let Some(&(_, var, oldest)) = APPLE_DEPLOYMENT_TARGETS.iter().find(|(name, ..)| *name == os) else {
+		return;
+	};
+	println!("cargo:rerun-if-env-changed={var}");
+	let oldest_text = format!("{}.{}", oldest.0, oldest.1);
+	let target = if let Ok(asked) = env::var(var) {
+		assert!(
+			parse_version(&asked) >= oldest,
+			"{var} is {asked}, but prism needs at least {oldest_text}, the first release whose libc++ has std::jthread"
+		);
+		asked
+	} else {
+		if let Some(linked) = rustc_deployment_target().filter(|linked| parse_version(linked) < oldest) {
+			println!(
+				"cargo:warning=rustc links for {os} {linked}, but prism needs {oldest_text}. Set {var}={oldest_text} or \
+				 later, or the link fails or the program fails to start on releases before {oldest_text}."
+			);
+		}
+		oldest_text
+	};
+	// SAFETY: build scripts are single threaded, and nothing else reads the environment while this runs.
+	unsafe { env::set_var(var, &target) };
+	let _ = cfg.define("CMAKE_OSX_DEPLOYMENT_TARGET", &target);
+}
+
+/// Asks rustc which OS release it links the target for, which it prints as `VAR=version`.
+fn rustc_deployment_target() -> Option<String> {
+	let rustc = env::var_os("RUSTC")?;
+	let target = env::var("TARGET").ok()?;
+	let output =
+		std::process::Command::new(rustc).args(["--print", "deployment-target", "--target", &target]).output().ok()?;
+	let text = String::from_utf8(output.stdout).ok()?;
+	Some(text.trim().split_once('=')?.1.to_owned())
+}
+
+fn parse_version(version: &str) -> (u32, u32) {
+	let mut parts = version.split('.').map(|part| part.parse().unwrap_or(0));
+	(parts.next().unwrap_or(0), parts.next().unwrap_or(0))
+}
+
+/// Builds prism with the NDK's own `CMake` toolchain, which cmake-rs then leaves the compiler to.
+fn use_android_ndk(cfg: &mut Config) {
+	if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
+		return;
+	}
+	// cargo-ndk names the toolchain file itself. Otherwise it's found in the NDK.
+	let vars = ["CARGO_NDK_CMAKE_TOOLCHAIN_PATH", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_NDK"];
+	for var in vars {
+		println!("cargo:rerun-if-env-changed={var}");
+	}
+	let toolchain = env::var_os(vars[0]).map(PathBuf::from).or_else(|| {
+		vars[1..].iter().find_map(env::var_os).map(|ndk| PathBuf::from(ndk).join("build/cmake/android.toolchain.cmake"))
+	});
+	let toolchain = toolchain.expect(
+		"building prism for Android needs the NDK; build with cargo-ndk, or set ANDROID_NDK_HOME to the NDK's directory",
+	);
+	let abi = match env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+		Ok("aarch64") => "arm64-v8a",
+		Ok("arm") => "armeabi-v7a",
+		Ok("x86_64") => "x86_64",
+		Ok("x86") => "x86",
+		other => panic!("prism has no Android ABI for {other:?}"),
+	};
+	let _ = cfg
+		.define("CMAKE_TOOLCHAIN_FILE", toolchain)
+		.define("ANDROID_ABI", abi)
+		.define("ANDROID_PLATFORM", ANDROID_PLATFORM);
+	// The Visual Studio generator CMake picks on a Windows host can't build for Android.
+	if cfg!(windows) && env::var_os("CMAKE_GENERATOR").is_none() {
+		let _ = cfg.generator("Ninja");
 	}
 }

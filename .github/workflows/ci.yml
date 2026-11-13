@@ -45,6 +45,100 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
       - run: cargo test --all-features
+  ios:
+    name: iOS simulator
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      # rustc links devices for an iOS too old for prism unless told otherwise, so this proves prism follows what it's told.
+      - name: Link for devices
+        run: cargo build --example speak --target aarch64-apple-ios
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+      - name: Build for the simulator
+        run: cargo build --example speak --target aarch64-apple-ios-sim
+      # The simulator only runs a program from an installed app, so the example goes into a bare one.
+      - name: Run in the simulator
+        shell: bash
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c "import json, sys; devices = json.load(sys.stdin)['devices']; print(next(d['udid'] for runtime, found in devices.items() if 'iOS' in runtime for d in found if d['name'].startswith('iPhone')))")
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
+          app=target/PrismerSpeak.app
+          mkdir -p "$app"
+          cp target/aarch64-apple-ios-sim/debug/examples/speak "$app/"
+          cat > "$app/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>speak</string>
+          <key>CFBundleIdentifier</key><string>org.accessware.prismer.speak</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>CFBundleVersion</key><string>1</string>
+          <key>MinimumOSVersion</key><string>14.0</string>
+          </dict></plist>
+          EOF
+          codesign -s - "$app"
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl spawn "$udid" "$(xcrun simctl get_app_container "$udid" org.accessware.prismer.speak)/speak" | tee ios.log
+          grep -q "using backend: AVSpeech" ios.log
+  android:
+    name: Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/android/rust
+      - run: cargo install cargo-ndk --locked
+      # prism's Gradle build asks for a Java 25 toolchain, and fetches the NDK it pins itself.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Build prism's library archive
+        working-directory: crates/prism-sys/prism
+        run: ./gradlew assembleRelease --console=plain
+      # The Rust side is built with the NDK prism pins too, rather than the runner's default one.
+      - name: Use prism's NDK
+        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$(grep -oP "ndkVersion = '\K[^']+" crates/prism-sys/prism/build.gradle)" >> "$GITHUB_ENV"
+      - name: Build the example
+        working-directory: examples/android
+        run: ../../crates/prism-sys/prism/gradlew assembleDebug --console=plain
+      # The emulator needs KVM, which the runner has but does not open to its user.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The emulator has no screen reader running, so this speaks through Android's text to speech.
+      - name: Run in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install examples/android/build/outputs/apk/debug/prismer-android-example-debug.apk
+            adb logcat -c
+            adb shell am start -W -n org.accessware.prismer.example/.MainActivity
+            for i in $(seq 1 60); do adb logcat -d -s PRISMER | grep -q -E "done|failed" && break; sleep 1; done
+            adb logcat -d -s PRISMER
+            adb logcat -d -s PRISMER | grep -q "best Android Text to Speech"
+            adb logcat -d -s PRISMER | grep -q "done"
   docs:
     name: Docs
     runs-on: ubuntu-latest

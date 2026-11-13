@@ -1,0 +1,4 @@
+/.gradle/
+/build/
+/rust/target/
+/rust/Cargo.lock

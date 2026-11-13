@@ -1,0 +1,16 @@
+[package]
+name = "prismer-android-example"
+description = "The Rust half of prismer's Android example"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# Built for Android only, by the app's Gradle build, so it stays out of prismer's workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+prismer = { path = "../../../crates/prismer" }

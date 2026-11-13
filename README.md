@@ -49,9 +49,38 @@ set PRISM_LIB_DIR=path\to\prism\build
 cargo build
 ```
 
-By default prism is built and linked as a shared library; note that your application must be able to find it (next to the executable on Windows, or on the loader path elsewhere) at runtime. Enable the `static` feature to build and link it statically instead. The build script links the C++ runtime and the system libraries prism needs for you.
+By default prism is built and linked as a shared library; note that your application must be able to find it (next to the executable on Windows, or on the loader path elsewhere) at runtime. Enable the `static` feature to build and link it statically instead. iOS, tvOS, watchOS and visionOS always link it statically, and Android always links it shared, whatever the feature says. The build script links the C++ runtime and the system libraries prism needs for you.
 
 On Apple platforms that only holds when cargo does the final link. If you build a Rust `staticlib` and link it from Xcode, add the system frameworks to your Xcode target yourself: Foundation and AVFoundation everywhere, plus AppKit, CoreServices, Security, IOKit and CoreFoundation on macOS, UIKit on iOS, tvOS and visionOS, or WatchKit on watchOS. prism's Objective-C++ also needs `libobjc`, which Xcode links for any target with Objective-C or Swift code of its own.
+
+## Platforms
+
+| Platform | Targets | Backends | Oldest version |
+| --- | --- | --- | --- |
+| Windows | `x86_64-pc-windows-msvc` | NVDA, JAWS, ZoomText, SAPI, OneCore, UI Automation and more | Windows 10 |
+| macOS | `aarch64-apple-darwin`, `x86_64-apple-darwin` | VoiceOver, AVSpeech | macOS 11 |
+| iOS | `aarch64-apple-ios`, `aarch64-apple-ios-sim` | VoiceOver, AVSpeech | iOS 14 |
+| Linux | `x86_64-unknown-linux-gnu` | Speech Dispatcher, Orca | The build machine's glibc |
+| Android | `aarch64-linux-android`, `x86_64-linux-android` | The running screen reader, such as TalkBack, and Android text to speech | Android 8 (API 26) |
+
+### Apple
+
+prism needs `std::jthread`, which Apple's C++ library only has from macOS 11 and iOS 14 on, so prism is built for those or for whatever `MACOSX_DEPLOYMENT_TARGET` or `IPHONEOS_DEPLOYMENT_TARGET` asks for. rustc links iOS devices for iOS 10 and Intel Macs for macOS 10.12 unless told otherwise, so set the variable for those, for example `IPHONEOS_DEPLOYMENT_TARGET=14.0`. Without it an iOS device build fails to link, and the build script warns you. Xcode sets it for you when it runs cargo from a build phase.
+
+### Linux
+
+prism uses `libdbus-1`, and talks to Speech Dispatcher, which has to be installed with a voice, as it is on most desktops. Building needs the development files for D-Bus and Speech Dispatcher, `libdbus-1-dev` and `libspeechd-dev` on Ubuntu, and prism's Clipboard backend also wants `libxcb1-dev` and `libwayland-dev`.
+
+### Android
+
+prism's Android backends are written in Java as much as C++, so an Android app needs prism's library archive as well as your Rust library:
+
+1. Build your Rust library with [cargo-ndk](https://github.com/bbqsrc/cargo-ndk), which hands prism-sys the NDK. On Windows, `ninja` has to be on `PATH`.
+2. Build prism's archive from the same prism prism-sys was built from, with `gradlew assembleRelease` in the `prism` submodule, and add it to your app with core library desugaring enabled. Besides the Java backends, it carries `libprism.so` for each ABI, and a manifest entry that hands prism the application context when the app starts.
+3. Load prism from a Java or Kotlin class of your app before your Rust library, with `System.loadLibrary("prism")`. prism finds its Java classes through the class loader of whatever loads it.
+4. Call `create_best`, `acquire_best` and `initialize` from a thread other than the main one. Starting Android's speech engine waits on a callback that arrives on the main thread, so on the main thread it times out and the backend fails to start.
+
+`examples/android` is a complete app doing all of this. With prism's archive built, `gradlew assembleDebug` there builds the Rust library and the app together.
 
 ## Custom backends
 

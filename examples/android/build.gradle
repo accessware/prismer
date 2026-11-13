@@ -1,0 +1,54 @@
+plugins {
+	id 'com.android.application' version '9.5.0'
+}
+
+// prism's library archive, which its own Gradle build makes from the submodule: its Java backends,
+// libprism.so for each ABI, and the manifest entry that hands prism the application context. It has
+// to come from the same prism the Rust library was built against.
+def prismArchive = file('../../crates/prism-sys/prism/build/android/gradle/outputs/aar/prism-release.aar')
+def rustLibraries = layout.buildDirectory.dir('rust/jniLibs')
+
+android {
+	namespace = 'org.accessware.prismer.example'
+	compileSdk = 36
+	defaultConfig {
+		applicationId = 'org.accessware.prismer.example'
+		minSdk = 26
+		targetSdk = 36
+		versionCode = 1
+		versionName = '1.0'
+		ndk {
+			abiFilters 'arm64-v8a', 'x86_64'
+		}
+	}
+	// prism's archive asks for it, since prism's own build turns it on.
+	compileOptions {
+		coreLibraryDesugaringEnabled = true
+	}
+	sourceSets {
+		main {
+			jniLibs.srcDirs += rustLibraries
+		}
+	}
+}
+
+dependencies {
+	implementation files(prismArchive)
+	coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+}
+
+// Builds the Rust library for each ABI into the directory above. cargo-ndk leaves libprism.so out,
+// since it isn't one of cargo's outputs, so the app gets prism's from the archive.
+def cargoBuild = tasks.register('cargoBuild', Exec) {
+	workingDir = file('rust')
+	commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-t', 'x86_64', '-o', rustLibraries.get().asFile.path, 'build', '--release'
+}
+
+tasks.named('preBuild') {
+	dependsOn cargoBuild
+	doFirst {
+		if (!prismArchive.exists()) {
+			throw new GradleException("prism's library archive is missing. Run gradlew assembleRelease in crates/prism-sys/prism first.")
+		}
+	}
+}
