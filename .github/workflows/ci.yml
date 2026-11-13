@@ -23,18 +23,29 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
   check:
-    name: Clippy and tests (${{ matrix.os }})
+    name: Clippy and tests (${{ matrix.target }})
+    # prism is C++ built for each architecture, so every target with a runner of its own is tested on it. x86 Windows runs on the x64 runner.
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: windows-latest, target: i686-pc-windows-msvc }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: macos-15-intel, target: x86_64-apple-darwin }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ matrix.target }}
           components: clippy
       - name: Install prism's Linux dependencies
         if: runner.os == 'Linux'
