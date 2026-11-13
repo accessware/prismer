@@ -55,12 +55,14 @@ On Apple platforms that only holds when cargo does the final link. If you build 
 
 ## Platforms
 
+CI builds and tests every target below, and runs the iOS and Android examples in a simulator and an emulator.
+
 | Platform | Targets | Backends | Oldest version |
 | --- | --- | --- | --- |
-| Windows | `x86_64-pc-windows-msvc` | NVDA, JAWS, ZoomText, SAPI, OneCore, UI Automation and more | Windows 10 |
+| Windows | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, `i686-pc-windows-msvc` | NVDA, JAWS, ZoomText, SAPI, OneCore, UI Automation and more | Windows 10 |
 | macOS | `aarch64-apple-darwin`, `x86_64-apple-darwin` | VoiceOver, AVSpeech | macOS 11 |
 | iOS | `aarch64-apple-ios`, `aarch64-apple-ios-sim` | VoiceOver, AVSpeech | iOS 14 |
-| Linux | `x86_64-unknown-linux-gnu` | Speech Dispatcher, Orca | The build machine's glibc |
+| Linux | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | Speech Dispatcher, Orca | The build machine's glibc |
 | Android | `aarch64-linux-android`, `x86_64-linux-android` | The running screen reader, such as TalkBack, and Android text to speech | Android 8 (API 26) |
 
 ### Apple
