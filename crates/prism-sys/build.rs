@@ -130,6 +130,11 @@ fn build_vendored(static_link: bool) -> PathBuf {
 			env::var("CARGO_CFG_TARGET_FEATURE").is_ok_and(|features| features.split(',').any(|f| f == "crt-static"));
 		let _ = cfg.define("CMAKE_MSVC_RUNTIME_LIBRARY", if crt_static { "MultiThreaded" } else { "MultiThreadedDLL" });
 	}
+	if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+		// Homebrew on Intel installs into /usr/local/include, where clang looks by default, and an
+		// older simdutf there was found ahead of the one prism bundles, so the bundled one is named first.
+		let _ = cfg.cxxflag(format!("-I{}", source.join("third_party/simdutf/include").display()));
+	}
 	set_apple_deployment_target(&mut cfg);
 	use_android_ndk(&mut cfg);
 	let dst = cfg.build();
